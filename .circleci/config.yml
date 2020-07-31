@@ -1,0 +1,57 @@
+version: 2.1
+
+jobs:
+  build_and_push:
+    description: grpcio 패키지를 포함한 python 이미지를 빌드하고 ECR에 푸시합니다.
+    parameters:
+      image_tag:
+        description: 베이스가 될 python 이미지 태그
+        type: string
+      grpcio_version:
+        description: 설치할 grpcio 패키지 버전
+        type: string
+    docker:
+      - image: cimg/python:3.8
+    resource_class: small
+    steps:
+      - setup_remote_docker
+      - checkout
+      - run:
+          name: Setup environment variables
+          command: |
+            echo 'export IMAGE_NAME="spoqadodo/python-grpcio"' >> $BASH_ENV
+            echo 'export IMAGE_TAG="<< parameters.image_tag >>-<< parameters.grpcio_version >>"' >> $BASH_ENV
+      - run:
+          name: Build image
+          command: |
+            docker build \
+              --build-arg image_tag="<< parameters.image_tag >>" \
+              --build-arg grpcio_version="<< parameters.grpcio_version >>" \
+              -t "${IMAGE_NAME}:${IMAGE_TAG}" \
+              .
+          no_output_timeout: 20m
+      - run:
+          name: Login to Docker Hub
+          command: |
+            echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+      - run:
+          name: Publish Docker image to Docker Hub
+          command: |
+            docker push "${IMAGE_NAME}:${IMAGE_TAG}"
+
+workflows:
+  version: 2
+  main:
+    jobs:
+      - build_and_push:
+          matrix:
+            parameters:
+              image_tag:
+                - 3.8-alpine
+              grpcio_version:
+                - 1.30.0
+          context: dockerhub
+          filters:
+            branches:
+              only:
+                - main
